@@ -237,7 +237,7 @@ impl AsyncWrite for UnixStream {
 }
 
 
-pub struct ReadHalf<'a>(&'a std::marker::PhantomData<u8>);
-pub struct WriteHalf<'a>(&'a std::marker::PhantomData<u8>);
+pub struct ReadHalf<'a>(std::marker::PhantomData<&'a u8>);
+pub struct WriteHalf<'a>(std::marker::PhantomData<&'a u8>);
 pub struct OwnedReadHalf;
 pub struct OwnedWriteHalf;
