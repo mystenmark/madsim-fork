@@ -37,6 +37,7 @@ pub(crate) fn enter(new: Handle) -> EnterGuard {
     })
 }
 
+#[derive(Debug)]
 pub(crate) struct EnterGuard(Option<Handle>);
 
 impl Drop for EnterGuard {

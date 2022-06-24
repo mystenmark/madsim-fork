@@ -6,7 +6,9 @@ pub use self::sim::*;
 #[cfg(madsim)]
 mod sim {
     // no mod `runtime`
-    pub mod runtime;
+    pub mod runtime {
+        pub use madsim::runtime::*;
+    }
     // TODO: simulate `task_local`
 
     // simulated API

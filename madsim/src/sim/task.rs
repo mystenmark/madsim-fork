@@ -22,6 +22,10 @@ use std::{
 
 pub use tokio::task::yield_now;
 
+/// Id
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+pub struct Id(u64);
+
 pub(crate) struct Executor {
     queue: mpsc::Receiver<(Runnable, Arc<TaskInfo>)>,
     handle: TaskHandle,
@@ -157,11 +161,13 @@ pub(crate) struct TaskHandle {
     next_node_id: Arc<AtomicU64>,
 }
 
+pub(crate) type InitFn = dyn Fn(&TaskNodeHandle) + Send + Sync;
+
 struct Node {
     info: Arc<TaskInfo>,
     paused: Vec<Runnable>,
     /// A function to spawn the initial task.
-    init: Option<Arc<dyn Fn(&TaskNodeHandle)>>,
+    init: Option<Arc<InitFn>>,
 }
 
 impl TaskHandle {
@@ -216,7 +222,7 @@ impl TaskHandle {
     pub fn create_node(
         &self,
         name: Option<String>,
-        init: Option<Arc<dyn Fn(&TaskNodeHandle)>>,
+        init: Option<Arc<InitFn>>,
     ) -> TaskNodeHandle {
         let id = NodeId(self.next_node_id.fetch_add(1, Ordering::SeqCst));
         let info = Arc::new(TaskInfo {

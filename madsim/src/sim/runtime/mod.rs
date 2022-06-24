@@ -1,7 +1,7 @@
 //! The madsim runtime.
 
 use super::*;
-use crate::task::{JoinHandle, NodeId};
+use crate::task::{JoinHandle, NodeId, InitFn};
 use std::{
     any::TypeId,
     collections::HashMap,
@@ -10,6 +10,8 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+
+//use tokio::runtime::TryCurrentError;
 
 pub(crate) mod context;
 
@@ -197,6 +199,71 @@ pub struct Handle {
     pub(crate) config: Config,
 }
 
+impl std::fmt::Debug for Handle {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        write!(fmt, "Handle")
+    }
+}
+
+/// EnterGuard
+#[derive(Debug)]
+#[must_use = "Creating and dropping a guard does nothing"]
+pub struct EnterGuard<'a> {
+    _guard: crate::context::EnterGuard,
+    _handle_lifetime: std::marker::PhantomData<&'a Handle>,
+}
+
+// Tokio api
+impl Handle {
+    /// enter
+    pub fn enter(&self) -> EnterGuard<'_> {
+        EnterGuard {
+            _guard: crate::context::enter(self.clone()),
+            _handle_lifetime: std::marker::PhantomData,
+        }
+    }
+
+    /*
+    pub fn try_current() -> Result<Self, TryCurrentError> {
+        context::try_current()
+    }
+
+    #[track_caller]
+    pub fn spawn<F>(&self, future: F) -> JoinHandle<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        self.spawn_named(future, None)
+    }
+
+    #[track_caller]
+    pub fn spawn_blocking<F, R>(&self, func: F) -> JoinHandle<R>
+    where
+        F: FnOnce() -> R + Send + 'static,
+        R: Send + 'static,
+    {
+        self.as_inner().spawn_blocking(self, func)
+    }
+
+    #[track_caller]
+    pub(crate) fn spawn_named<F>(&self, future: F, _name: Option<&str>) -> JoinHandle<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        let id = crate::runtime::task::Id::next();
+        #[cfg(all(tokio_unstable, feature = "tracing"))]
+        let future = crate::util::trace::task(future, "task", _name, id.as_u64());
+        self.spawner.spawn(future, id)
+    }
+
+    pub(crate) fn shutdown(mut self) {
+        self.spawner.shutdown();
+    }
+    */
+}
+
 impl Handle {
     /// Returns a [`Handle`] view over the currently running [`Runtime`].
     ///
@@ -256,7 +323,7 @@ pub struct NodeBuilder<'a> {
     handle: &'a Handle,
     name: Option<String>,
     ip: Option<IpAddr>,
-    init: Option<Arc<dyn Fn(&task::TaskNodeHandle)>>,
+    init: Option<Arc<InitFn>>,
 }
 
 impl<'a> NodeBuilder<'a> {
@@ -280,7 +347,7 @@ impl<'a> NodeBuilder<'a> {
     /// Set the initial task for the node.
     ///
     /// This task will be automatically respawned after crash.
-    pub fn init<F>(mut self, future: impl Fn() -> F + 'static) -> Self
+    pub fn init<F>(mut self, future: impl Fn() -> F + 'static + Sync + Send) -> Self
     where
         F: Future + 'static,
     {
@@ -389,4 +456,23 @@ fn init_logger() {
         });
         builder.init();
     });
+}
+
+#[cfg(test)]
+mod test {
+    use super::Runtime;
+    use std::net::SocketAddr;
+
+    #[test]
+    #[should_panic]
+    fn block_on_panics_in_runtime() {
+        let runtime = Runtime::new();
+        let addr1 = "10.0.0.1:1".parse::<SocketAddr>().unwrap();
+        let node1 = runtime.create_node().ip(addr1.ip()).build();
+
+        node1.spawn(async move {
+            let rt2 = Runtime::new();
+            rt2.block_on(async { });
+        });
+    }
 }
