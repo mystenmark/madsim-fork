@@ -9,7 +9,10 @@ use std::{
     task::{Context, Poll},
 };
 
-use real_tokio::io::{Interest, Ready, ReadBuf, AsyncRead, AsyncWrite};
+use real_tokio::{
+    net::unix::UCred,
+    io::{Interest, Ready, ReadBuf, AsyncRead, AsyncWrite},
+};
 
 /// Provide the tokio::net::UnixListener interface.
 #[derive(Debug)]
@@ -161,10 +164,10 @@ impl UnixStream {
         todo!()
     }
 
-    // todo
-    //pub fn peer_cred(&self) -> io::Result<UCred> {
-    //    todo!()
-    //}
+    /// todo
+    pub fn peer_cred(&self) -> io::Result<UCred> {
+        todo!()
+    }
 
     /// todo
     pub fn take_error(&self) -> io::Result<Option<io::Error>> {

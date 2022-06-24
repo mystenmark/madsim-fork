@@ -1,9 +1,10 @@
-use log::trace;
+use log::{trace, info};
 
 use std::{
     future::Future,
     io,
-    net::{SocketAddr, ToSocketAddrs},
+    net,
+    net::SocketAddr,
     pin::Pin,
     sync::{
         atomic::{AtomicU32, Ordering},
@@ -12,11 +13,20 @@ use std::{
     task::{Context, Poll},
 };
 
+pub use std::net::ToSocketAddrs;
+
 use madsim::net::{network::Payload, Endpoint};
 
 use real_tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 pub use super::unix::*;
+pub use super::udp::*;
+pub use super::tcpsocket::*;
+
+pub mod unix {
+    pub use std::net::SocketAddr;
+    pub use real_tokio::net::unix::UCred;
+}
 
 type PollerPinFut<R> = Pin<Box<dyn Future<Output = R> + Send + Sync>>;
 struct Poller<R> {
@@ -135,6 +145,18 @@ impl TcpListener {
         let stream = TcpStream::new(state);
         Ok((stream, from))
     }
+
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.ep.local_addr()
+    }
+
+    pub fn into_std(self) -> io::Result<std::net::TcpListener> {
+        unimplemented!("can't make simulated TcpListener into std TcpListener")
+    }
+
+    pub fn from_std(_listener: net::TcpListener) -> io::Result<TcpListener> {
+        unimplemented!("can't make simulated TcpListener from std TcpListener")
+    }
 }
 
 struct Buffer {
@@ -172,19 +194,24 @@ impl Buffer {
     }
 
     fn read(&mut self, read: &mut ReadBuf<'_>) -> usize {
-        let remaining_bytes = self.remaining_bytes();
-        let to_write = std::cmp::min(remaining_bytes, read.remaining());
-        if to_write > 0 {
-            read.put_slice(&self.buffer[self.buffer_cursor..(self.buffer_cursor + to_write)]);
-        }
-        self.buffer_cursor += to_write;
+        let num_read = self.peek(read);
+        self.buffer_cursor += num_read;
 
         if self.remaining_bytes() == 0 {
             self.buffer_cursor = 0;
             self.buffer.clear();
         }
 
-        to_write
+        num_read
+    }
+
+    fn peek(&self, read: &mut ReadBuf<'_>) -> usize {
+        let remaining_bytes = self.remaining_bytes();
+        let to_read = std::cmp::min(remaining_bytes, read.remaining());
+        if to_read > 0 {
+            read.put_slice(&self.buffer[self.buffer_cursor..(self.buffer_cursor + to_read)]);
+        }
+        to_read
     }
 
     fn write(&mut self, buf: Buffer) {
@@ -386,6 +413,39 @@ impl TcpStream {
         }
     }
 
+    pub fn poll_peek(
+        &self,
+        cx: &mut Context<'_>,
+        read: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<usize>> {
+        debug_assert_ne!(read.remaining(), 0);
+
+        let mut buffer = self.buffer.lock().unwrap();
+
+        let num_read = buffer.peek(read);
+
+        if num_read > 0 {
+            // We might be able to read more from the network right now,
+            // but for simplicity we just return immediately if there was anything in the buffer.
+            return Poll::Ready(Ok(num_read));
+        }
+
+        let poll = self
+            .read_poller
+            .poll_with_fut(cx, || Self::read(self.state.clone()));
+
+        match poll {
+            Poll::Ready(Ok(buf)) => {
+                // fill buffer with whatever we can, and save remainder for later.
+                let num_read = buf.peek(read);
+                buffer.write(buf);
+                Poll::Ready(Ok(num_read))
+            }
+            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+
     // flush and shutdown are no-ops
     fn poll_flush_priv(&self, _: &mut Context<'_>) -> Poll<io::Result<()>> {
         Poll::Ready(Ok(()))
@@ -395,7 +455,60 @@ impl TcpStream {
         // TODO: implement?
         Poll::Ready(Ok(()))
     }
+
+    pub fn peer_addr(&self) -> io::Result<SocketAddr> {
+        self.state.ep.peer_addr()
+    }
+
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.state.ep.local_addr()
+    }
 }
+
+#[cfg(unix)]
+mod sys {
+    use super::TcpStream;
+    use std::os::unix::prelude::*;
+
+    impl AsRawFd for TcpStream {
+        fn as_raw_fd(&self) -> RawFd {
+            unimplemented!("can't make a raw fd from simulated TcpStream")
+        }
+    }
+}
+
+// Ignored APIs
+impl TcpStream {
+    pub fn nodelay(&self) -> io::Result<bool> {
+        Ok(true)
+    }
+
+    /// Sets the value of the `TCP_NODELAY` option on this socket.
+    ///
+    /// If set, this option disables the Nagle algorithm. This means that
+    /// segments are always sent as soon as possible, even if there is only a
+    /// small amount of data. When not set, data is buffered until there is a
+    /// sufficient amount to send out, thereby avoiding the frequent sending of
+    /// small packets.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tokio::net::TcpStream;
+    ///
+    /// # async fn dox() -> Result<(), Box<dyn std::error::Error>> {
+    /// let stream = TcpStream::connect("127.0.0.1:8080").await?;
+    ///
+    /// stream.set_nodelay(true)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn set_nodelay(&self, _nodelay: bool) -> io::Result<()> {
+        info!("TcpStream::nodelay ignored in simulator");
+        Ok(())
+    }
+}
+
 
 impl AsyncRead for TcpStream {
     fn poll_read(

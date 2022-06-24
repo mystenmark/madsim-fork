@@ -8,6 +8,7 @@ mod sim {
     // no mod `runtime`
     pub mod runtime {
         pub use madsim::runtime::*;
+        pub use madsim::runtime::builder::*;
     }
     // TODO: simulate `task_local`
 
@@ -22,6 +23,8 @@ mod sim {
 
     pub mod net;
     mod unix;
+    mod udp;
+    mod tcpsocket;
 
     // not simulated API
     // TODO: simulate `fs`
