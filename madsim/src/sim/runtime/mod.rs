@@ -44,7 +44,14 @@ impl Default for Runtime {
 impl Runtime {
     /// Create a new runtime instance with default seed and config.
     pub fn new() -> Self {
+        println!("HAY");
         Self::with_seed_and_config(0, Config::default())
+    }
+
+    /// TODO: tokio Runtime returns io::Result<Self>, so people expect to unwrap it.
+    /// We should really match the API, but that's a huge pain.
+    pub fn unwrap(self) -> Self {
+        self
     }
 
     /// Create a new runtime instance with given seed and config.
@@ -139,6 +146,12 @@ impl Runtime {
     /// Runtime::new().block_on(pending::<()>());
     /// ```
     pub fn block_on<F: Future>(&self, future: F) -> F::Output {
+        println!(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+        println!(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+        println!(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+        println!(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+        println!(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+        println!("block_on {:#?}", backtrace::Backtrace::new());
         let _guard = crate::context::enter(self.handle.clone());
         self.task.block_on(future)
     }

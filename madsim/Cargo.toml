@@ -28,6 +28,7 @@ log = "0.4"
 madsim-macros = { version = "=0.2.0-alpha.3", path = "../madsim-macros", optional = true }
 rand = { version = "0.8", features = ["small_rng"] }
 serde = { version = "1", features = ["derive"] }
+backtrace = { version = "0.3" }
 
 [target.'cfg(madsim)'.dependencies]
 ahash = "0.7"

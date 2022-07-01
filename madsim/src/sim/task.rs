@@ -417,6 +417,18 @@ impl std::error::Error for JoinError {
     }
 }
 
+impl From<JoinError> for std::io::Error {
+    fn from(src: JoinError) -> std::io::Error {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            match src.is_panic {
+                false => "task was cancelled",
+                true => "task panicked",
+            },
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -34,7 +34,6 @@ full = [
 fs = ["real_tokio/fs"]
 io-util = ["real_tokio/io-util"]
 io-std = ["real_tokio/io-std"]
-macros = ["real_tokio/macros"]
 net = ["real_tokio/net"]
 parking_lot = ["real_tokio/parking_lot"]
 process = ["real_tokio/process"]
@@ -54,14 +53,17 @@ once_cell = ["real_tokio/once_cell"]
 signal-hook-registry = ["real_tokio/signal-hook-registry"]
 socket2 = ["real_tokio/socket2"]
 stats = ["real_tokio/stats"]
-tokio-macros = ["real_tokio/tokio-macros"]
 
+tokio-macros = ["real_tokio/macros"]
+macros = ["real_tokio/macros"]
 
 [target.'cfg(madsim)'.dependencies]
 madsim = { version = "=0.2.0-alpha.3", path = "../madsim" }
+#madsim-macros = { version = "=0.2.0-alpha.3", path = "../madsim-macros", optional = true }
 
 [dependencies]
 log = "0.4"
 real_tokio = { path = "../tokio/tokio", package = "real_tokio" }
 bytes = { version = "1.1" }
 futures = { version = "0.3.0", features = ["async-await"] }
+tracing = { version = "0.1" }
